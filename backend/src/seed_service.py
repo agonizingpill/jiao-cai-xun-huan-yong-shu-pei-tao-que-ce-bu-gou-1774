@@ -36,4 +36,5 @@ def seed():
         for i in range(96):
             code='HIST-'+str(i+1).zfill(3);subjects=patterns[int(rng.choice(4,p=[.4,.3,.2,.1]))]
             if not s.scalar(select(HistoricalBasket.id).where(HistoricalBasket.code==code)):s.add(HistoricalBasket(code=code,subjects=subjects))
-        s.commit();return {m.__tablename__:s.scalar(select(func.count()).select_from(m))for m in (User,Edition,Compatibility,Classroom,Student,Copy,Inspection,Pack,PackLine,Assignment,Purchase,Account,DepositEntry,HistoricalBasket)}
+        if not s.scalar(select(SubjectMutex.id)):s.add(SubjectMutex(subject_a='computing',subject_b='math',reason='教研组登记：信息技术实训与数学拓展课时冲突，学期内二选一'))
+        s.commit();return {m.__tablename__:s.scalar(select(func.count()).select_from(m))for m in (User,Edition,Compatibility,Classroom,Student,Copy,Inspection,Pack,PackLine,Assignment,Purchase,Account,DepositEntry,HistoricalBasket,SubjectMutex)}

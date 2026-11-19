@@ -50,3 +50,7 @@ class DepositEntry(Base):
 class HistoricalBasket(Base):
     __tablename__='historical_baskets'
     id=Column(Integer,primary_key=True);code=Column(String(40),unique=True,nullable=False);subjects=Column(JSON,nullable=False)
+class SubjectMutex(Base):
+    __tablename__='subject_mutexes'
+    id=Column(Integer,primary_key=True);subject_a=Column(String(40),nullable=False);subject_b=Column(String(40),nullable=False);reason=Column(String(250),default='')
+    __table_args__=(UniqueConstraint('subject_a','subject_b'),CheckConstraint('subject_a<subject_b'))

@@ -12,6 +12,7 @@ from .common import lock,inventory_lock,pack,add,audit
 from .auth import current,writer,supervisor,verify,token
 from .middleware import Trace,Burst
 from . import pack_service as packs,circulation_service as circulation
+from .constraints import mutex_pairs,mutex_checksum,add_mutex,delete_mutex,snapshot
 q=redis.Redis.from_url(os.environ['REDIS_URL'],decode_responses=True)
 @asynccontextmanager
 async def lifespan(app):
@@ -35,7 +36,15 @@ def login(d:Login,s=Depends(session)):
 def me(u=Depends(current)):return {'email':u.email,'role':u.role}
 @app.get('/archive')
 def archive(s=Depends(session),u=Depends(current)):
-    return {m.__tablename__:[pack(x)for x in s.scalars(select(m).order_by(m.id))]for m in (Edition,Compatibility,Classroom,Student,Copy,Inspection,Pack,PackLine,Assignment,Purchase,Account,DepositEntry)}
+    return {m.__tablename__:[pack(x)for x in s.scalars(select(m).order_by(m.id))]for m in (Edition,Compatibility,Classroom,Student,Copy,Inspection,Pack,PackLine,Assignment,Purchase,Account,DepositEntry,HistoricalBasket,SubjectMutex)}|{'constraints_checksum':mutex_checksum(mutex_pairs(s))}
+@app.get('/subject-mutexes')
+def subject_mutexes(s=Depends(session),u=Depends(current)):return snapshot(s)
+@app.post('/subject-mutexes')
+def subject_mutex_new(d:SubjectMutexInput,s=Depends(session),u=Depends(writer)):
+    x=add_mutex(s,d,u);s.commit();return x
+@app.delete('/subject-mutexes/{id}')
+def subject_mutex_remove(id:int,s=Depends(session),u=Depends(writer)):
+    x=delete_mutex(s,id,u);s.commit();return x
 @app.get('/audits')
 def audits(s=Depends(session),u=Depends(current)):return [pack(x)for x in s.scalars(select(Audit).order_by(Audit.id.desc()).limit(50))]
 @app.post('/editions')
@@ -75,11 +84,18 @@ def pack_new(d:PackInput,s=Depends(session),u=Depends(writer)):
 @app.post('/packs/{id}/recommend')
 def recommend(id:int,s=Depends(session),u=Depends(writer)):
     p=lock(s,Pack,id)
-    if p.ml_state not in ('recorded','failed'):raise HTTPException(409,'只可估计新配套或失败重试')
+    if p.ml_state in('queued','running'):raise HTTPException(409,'分析任务已在队列或进行中，请勿重复排队')
     p.ml_state='queued';p.error=None;s.commit()
     try:q.rpush('book-baskets',id)
     except Exception:p.ml_state='failed';p.error='队列不可用，恢复后可重新排队';s.commit();raise HTTPException(503,p.error)
     return pack(p)
+@app.post('/packs/{id}/publish')
+def publish(id:int,s=Depends(session),u=Depends(writer)):
+    p=lock(s,Pack,id)
+    if p.ml_state!='ready':raise HTTPException(409,'只有按当前互斥限制完成的分析结果可发布；请先重新分析')
+    rec=p.recommendation or {}
+    if rec.get('constraints_checksum')!=mutex_checksum(mutex_pairs(s)):raise HTTPException(409,'互斥关系已变更，按旧限制算出的建议不能发布，请重新分析')
+    p.ml_state='published';p.error=None;audit(s,u,'发布班级共需建议 '+p.code);s.commit();return pack(p)
 @app.post('/packs/{id}/reserve')
 def reserve(id:int,s=Depends(session),u=Depends(supervisor)):
     x=packs.reserve(s,id,u);s.commit();return x

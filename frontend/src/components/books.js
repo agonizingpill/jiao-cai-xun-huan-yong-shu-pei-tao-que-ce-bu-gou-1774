@@ -6,5 +6,5 @@ export function copytag(copy,d){let e=d.editions.find(e=>e.id===copy.edition_id)
 export function checklist(p,d){return `<ul class="checklist">${d.pack_lines.filter(l=>l.pack_id===p.id).map(l=>{let e=d.editions.find(e=>e.id===l.edition_id),assigned=d.assignments.filter(a=>a.line_id===l.id&&a.replacement_for_id===null).length;return `<li><span>${esc(e.title)}<small>${esc(e.version)}</small></span><b>${assigned}/${l.quantity}</b><i style="--fill:${Math.min(100,assigned/l.quantity*100)}%"></i></li>`}).join('')}</ul>`}
 export function options(xs,label,selected){return xs.map(x=>`<option value="${x.id}" ${x.id===Number(selected)?'selected':''}>${esc(label(x))}</option>`).join('')}
 export function field(name,label,type='text',value='',attrs=''){return `<label>${label}<input name="${name}" type="${type}" value="${esc(value)}" ${attrs}></label>`}
-export function action(path,label,disabled=false){return `<button type="button" data-action="${path}" ${disabled?'disabled':''}>${label}</button>`}
+export function action(path,label,disabled=false,method='POST',message=''){return `<button type="button" data-action="${path}" data-method="${esc(method)}"${message?` data-message="${esc(message)}"`:''} ${disabled?'disabled':''}>${label}</button>`}
 export const writer=s=>s.user.role!=='viewer';export const supervisor=s=>s.user.role==='supervisor';
